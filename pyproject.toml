@@ -1,0 +1,201 @@
+[build-system]
+requires = ["hatchling", "hatch-requirements-txt"]# "hatch-regex-commit",
+build-backend = "hatchling.build"
+
+[project]
+name = "grafa"
+authors = [
+  { name = "Pablo Vargas", email = "pablov.c8@hotmail.com" }
+]
+description = "Knowledge Graph Generation Library"
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Python :: 3 :: Only",
+]
+requires-python = ">=3.11"
+
+dynamic = ["version", "dependencies", "license", "optional-dependencies"]
+
+[tool.hatch]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.metadata.hooks.requirements_txt]
+files = ["requirements.txt"]
+
+[tool.hatch.version]
+#source = "regex_commit"
+#commit_extra_args = ["-e"]
+path = "grafa/__about__.py"
+
+[tool.hatch.envs.default]
+python = "3.11"
+dependencies = [
+    "mypy",
+    "ruff",
+    "pre-commit",
+    "pytest",
+    "pytest-cov",
+    "mkdocs-material",
+    "mkdocstrings[python]",
+    "pytest-asyncio",
+]
+post-install-commands = [
+  "git init",
+  "pre-commit install",
+  "git add .",
+  "git commit -m 'Initializing project.' --no-verify",
+  "git flow init -d -t v"
+]
+
+[tool.hatch.envs.default.scripts]
+test = "pytest"
+test-cov-xml = "pytest --cov-report=xml"
+lint = [
+  "ruff format .",
+  "ruff --fix .",
+  "mypy grafa/",
+]
+lint-check = [
+  "ruff format --check .",
+  "ruff .",
+  "mypy grafa/",
+]
+docs-serve = "mkdocs serve"
+docs-build = "mkdocs build"
+
+[project.urls]
+Documentation = "https://codingmaster8.github.io/grafa/"
+Source = "https://github.com/codingmaster8/grafa"
+
+[tool.setuptools.package-data]
+"grafa" = ["py.typed"]
+
+[tool.ruff]
+select = [
+    # Pyflakes
+    "F",
+    # Pycodestyle
+    "E",
+    "W",
+    # isort
+    "I"
+]
+# Exclude a variety of commonly ignored directories.
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "site-packages",
+    "venv",
+]
+extend-select = ["D"]
+extend-ignore = [
+    "D107",
+    "D203",
+    "D212",
+    "D213",
+    "D402",
+    "D413",
+    "D415",
+    "D416",
+    "D417",
+]
+
+# Same as Black.
+line-length = 88
+indent-width = 4
+
+# Assume Python 3.8
+target-version = "py38"
+
+[tool.ruff.lint]
+# Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`)  codes by default.
+# Unlike Flake8, Ruff doesn't enable pycodestyle warnings (`W`) or
+# McCabe complexity (`C901`) by default.
+select = ["E4", "E7", "E9", "F", "W", "BLE", "D", "UP"]
+ignore = []
+
+# Allow fix for all enabled rules (when `--fix`) is provided.
+fixable = ["ALL"]
+unfixable = []
+
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+
+# Like Black, indent with spaces, rather than tabs.
+indent-style = "space"
+
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+
+# Like Black, automatically detect the appropriate line ending.
+line-ending = "auto"
+
+# Enable auto-formatting of code examples in docstrings. Markdown,
+# reStructuredText code/literal blocks and doctests are all supported.
+#
+# This is currently disabled by default, but it is planned for this
+# to be opt-out in the future.
+docstring-code-format = true
+
+# Set the line length limit used when formatting code snippets in
+# docstrings.
+#
+# This only has an effect when the `docstring-code-format` setting is
+# enabled.
+docstring-code-line-length = "dynamic"
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"  # Accepts: "google", "numpy", or "pep257".
+
+[tool.pyright]
+reportDeprecated = "none"
+
+[mypy]
+#plugins = "pydantic.mypy"
+follow_imports = "silent"
+warn_redundant_casts = true
+warn_unused_ignores = true
+disallow_any_generics = true
+check_untyped_defs = true
+no_implicit_reexport = true
+
+# for strict mypy
+disallow_untyped_defs = true
+
+#[pydantic-mypy]
+#init_forbid_extra = true
+#init_typed = true
+#warn_required_dynamic_aliases = true
+
+[tool.pytest.ini_options]
+addopts = "--cov=grafa/ --cov-report=term-missing"
+asyncio_mode = "strict"
+

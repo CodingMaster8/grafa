@@ -1,0 +1,28 @@
+{
+  "template": "https://github.com/mgczacki/cookiecutter-template",
+  "commit": "7c3a9e1851cd9d652da4d4664522ad420d08e054",
+  "checkout": null,
+  "context": {
+    "cookiecutter": {
+      "full_name": "Pablo Vargas",
+      "email": "pablov.c8@hotmail.com",
+      "username": "codingmaster8",
+      "project_name": "Grafa",
+      "dist_name": "grafa",
+      "package_name": "grafa",
+      "version": "0.0.1",
+      "project_short_description": "Knowledge Graph Generation Library",
+      "repository_name": "codingmaster8/grafa",
+      "repository_url": "https://github.com/codingmaster8/grafa",
+      "docs_url": "https://codingmaster8.github.io/grafa/",
+      "open_source_license": "Not open source",
+      "python_version": "3.11",
+      "asyncio": "Y",
+      "docs_icon": "material/library",
+      "docs_color_primary": "red",
+      "docs_color_accent": "pink",
+      "_template": "https://github.com/mgczacki/cookiecutter-template"
+    }
+  },
+  "directory": null
+}

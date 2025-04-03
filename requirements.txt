@@ -1,0 +1,14 @@
+aiobotocore==2.21.1
+async_lru==2.0.4
+fsspec==2025.2.0
+importlib-resources
+langchain==0.3.17
+langchain-aws==0.2.14
+langchain-community==0.3.16
+langchain-core==0.3.33
+langfuse==2.57.0
+langfuse==2.58.1
+neo4j==5.27.0
+pydantic>=2.0.0
+scikit-learn==1.6.1
+uuid7==0.1.0

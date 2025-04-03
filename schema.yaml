@@ -1,0 +1,103 @@
+database:
+  name: "Business Concepts"
+  description: "A knowledge graph for business concepts that are useful in a Consumer Packaged Goods company's promotional planning, sales analysis, and pricing strategy"
+  language: "Spanish"
+
+node_types:
+  Person:
+    description: "A person"
+    fields:
+      occupation:
+        type: STRING
+        description: "Occupation of the person"
+  Company:
+    description: "A company"
+    fields:
+      description:
+        type: STRING
+        description: "Description of the company"
+  Concept:
+    description: "A concept"
+    fields:
+      description:
+        type: STRING
+        description: "Description of the concept"
+  Metric:
+    description: "A metric"
+    fields:
+      description:
+        type: STRING
+        description: "Description of the metric"
+  Formula:
+    description: "A formula"
+    fields:
+      formula:
+        type: STRING
+        description: "Mathematical formula"
+  Rule:
+    description: "A rule"
+    fields:
+      rule_description:
+        type: STRING
+        description: "Description of the rule"
+  Condition:
+    description: "A condition"
+    fields:
+      condition:
+        type: STRING
+        description: "Condition for the rule flow"
+    options:
+      unique_name: false
+  Example:
+    description: "An example"
+    fields:
+      example:
+        type: STRING
+        description: "Example of a concept"
+    options:
+      unique_name: false
+relationships:
+  - from: Person
+    to: Company
+    type: WORKS_AT
+    description: "A person works at a company"
+
+  - from: Company
+    to: Company
+    type: IS_RELATED_TO
+    description: "A company is related to a company"
+
+  - from: Company
+    to: Concept
+    type: IS_RELATED_TO
+    description: "A company is related to a concept"
+
+  - from: Concept
+    to: Concept
+    type: IS_RELATED_TO
+    description: "A concept is related to a concept"
+
+  - from: Concept
+    to: Metric
+    type: IS_RELATED_TO
+    description: "A concept is related to a metric"
+
+  - from: Metric
+    to: Formula
+    type: FORMULA
+    description: "A metric is mentioned within a formula"
+
+  - from: Concept
+    to: Rule
+    type: USES_RULE
+    description: "A concept has a certain rule"
+
+  - from: Rule
+    to: Condition
+    type: IS_CONDITIONED
+    description: "A rule has a conditional flow, deciding what to do next"
+
+  - from: Concept
+    to: Example
+    type: EXAMPLE
+    description: "A concept has an example"
