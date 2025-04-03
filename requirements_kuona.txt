@@ -1,1 +1,0 @@
-kuona_secrets @ git+ssh://git@bitbucket.org/kuona/kuona_secrets.git@v1.0.3
