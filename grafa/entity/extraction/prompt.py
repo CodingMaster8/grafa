@@ -74,10 +74,11 @@ Your task is to identify all valid relationships between entities in a provided 
 
 <guidelines>
     0. Only relationships explicitly stated or clearly implied in the excerpt should be included.
-    1. Use only relationship types defined in the schema - never invent new types.
-    2. Relationships must follow the directionality defined in the schema (source → target).
-    3. Each relationship must be unique - avoid duplicate entries for the same entity pair + type.
-    4. Source and target entities must exist in the provided entity list.
+    1. Use ONLY the exact relationship combinations defined in the schema - never create combinations that don't exist.
+    2. MANDATORY: For each relationship, verify that the (from_entity_type, relationship_type, to_entity_type) combination exists in the allowed relationships list.
+    3. Relationships must follow the exact directionality defined in the schema (source → target).
+    4. Each relationship must be unique - avoid duplicate entries for the same entity pair + type.
+    5. Source and target entities must exist in the provided entity list.
     5. Do not consider relationships that appear only in the origin document context but not in the excerpt.
     6. Handle relationship coreference by:
         - Combining multiple mentions of the same relationship into a single entry
@@ -115,13 +116,21 @@ The entities you will be finding relationships between are provided below:
 {entities_str}
 </entities>
 
-The relationship types you will be finding are provided below:
+The EXACT relationship combinations allowed by the schema are provided below:
 
 <allowed_relationships>
 {allowed_relationships_str}
 </allowed_relationships>
 
-Remember, only these kinds of relationships are allowed. Not any other relationships.
+CRITICAL: You MUST ONLY create relationships that exactly match one of the above combinations. Each relationship above shows the EXACT from_type → to_type → relationship_type combination that is allowed.
+
+For each relationship you want to create:
+1. Find the from_entity in your entity list and note its type
+2. Find the to_entity in your entity list and note its type  
+3. Choose a relationship from the allowed list where from_type matches the from_entity type AND to_type matches the to_entity type
+4. Use the exact relationship type specified in that combination
+
+INVALID combinations will be rejected. Do NOT create relationships that do not appear in the allowed list above.
 
 You must output only a JSON file following this format:
 {format_instructions}
@@ -134,10 +143,11 @@ Important reminders:
  - The output must strictly conform to the JSON schema with no additional keys
 
 Final verification steps:
-1. Validate all relationships match schema types and directions
-2. Confirm source/target entities exist in provided list
-3. Check for duplicate relationships
-4. Ensure no schema violations exist
-5. Verify JSON structure matches required format exactly
-6. Return only the JSON, nothing else.
+1. For EACH relationship, verify the (from_entity_type, relationship_type, to_entity_type) combination exists EXACTLY in the allowed relationships list
+2. Confirm source/target entities exist in provided list with correct indices
+3. Validate all relationship types and directions match schema definitions exactly
+4. Check for duplicate relationships
+5. Ensure no schema violations exist - DELETE any relationship that doesn't have an exact match in the schema
+6. Verify JSON structure matches required format exactly
+7. Return only the JSON, nothing else.
 """

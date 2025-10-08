@@ -1,4 +1,6 @@
 """Module for loading documents into the knowledge graph."""
+import os
+from pathlib import Path
 
 from grafa.models import LoadFile
 
@@ -38,6 +40,18 @@ async def upload_file(file: LoadFile, s3_bucket: str, db_name: str) -> LoadFile:
     LoadFile
         The file with the populated attributes
     """
+
+    # If s3 bucket is a local path, save locally
+    if not s3_bucket.startswith("s3://"):
+        local_dir = Path(s3_bucket)
+        local_dir.mkdir(parents=True, exist_ok=True)
+        file_path = local_dir / f"{db_name}_{file.name}"
+        file_path.write_text(file.content or "")
+        file._raw_object_key = str(file_path)
+        file._raw_etag = str(hash(file.content or ""))
+        file._raw_version_id = "local"
+        return file
+    
     object_key = _get_object_key(db_name, file.name)
     # Populate file attributes
     file._s3_bucket = s3_bucket
@@ -102,18 +116,32 @@ async def process_file(file: LoadFile) -> LoadFile:
     metadata = {}
     if file.context:
         metadata["context"] = file.context
-    metadata["origin"] = f"s3://{file._s3_bucket}/{file._raw_object_key}"
+    
+    # Check if using local storage (when _s3_bucket doesn't start with s3://)
+    if file._s3_bucket and not file._s3_bucket.startswith("s3://"):
+        # Local storage handling
+        processed_file_path = Path(file._s3_bucket) / f"processed_{file.name}.txt"
+        processed_file_path.write_text(file_content)
+        
+        file._processed_object_key = str(processed_file_path)
+        file._processed_version_id = "local"
+        file._processed_etag = str(hash(file_content))
+        
+        metadata["origin"] = f"file://{file._raw_object_key}"
+    else:
+        # S3 storage handling
+        metadata["origin"] = f"s3://{file._s3_bucket}/{file._raw_object_key}"
+        
+        processed_object_key = _get_object_key(file._database_name, file.name, source=False)
 
-    processed_object_key = _get_object_key(file._database_name, file.name, source=False)
+        await upload_to_s3(
+            file._s3_bucket, file_content, processed_object_key, metadata=metadata
+        )
+        version_id, etag = await get_object_metadata(file._s3_bucket, processed_object_key)
 
-    await upload_to_s3(
-        file._s3_bucket, file_content, processed_object_key, metadata=metadata
-    )
-    version_id, etag = await get_object_metadata(file._s3_bucket, processed_object_key)
-
-    file._processed_object_key = processed_object_key
-    file._processed_version_id = version_id
-    file._processed_etag = etag
+        file._processed_object_key = processed_object_key
+        file._processed_version_id = version_id
+        file._processed_etag = etag
 
     file.content = file_content
 

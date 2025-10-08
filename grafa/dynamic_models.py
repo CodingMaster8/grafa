@@ -137,8 +137,17 @@ def load_definitions(
         model_config = {}
 
         for field_name, field_info in fields.items():
+            # Prevent model_config from being used as a field name
+            if field_name == "model_config":
+                raise ValueError("'model_config' cannot be used as a field name in Pydantic v2. Use a different field name.")
+            
             field_type_str = field_info.get("type", "STRING").upper()
-            if field_name in GrafaBaseNode.model_config["reserved_fields"]:
+            # Check if field name is reserved (avoid typing issues with model_config access)
+            reserved_fields = {
+                "uuid", "version", "create_date", "update_date", "model_config",
+                "grafa_database_name", "grafa_original_type_name", "embedding", "text_representation"
+            }
+            if field_name in reserved_fields:
                 raise ValueError(f"{field_name} cannot be overwritten")
             py_type, default = map_type(field_type_str)
             field_description = field_info.get("description", "")
@@ -172,13 +181,15 @@ def load_definitions(
         model_config["grafa_database_name"] = db_name
         model_config["grafa_original_type_name"] = node_name
         model_config["user_defined"] = True
-        additional_fields["model_config"] = ConfigDict(**model_config)
+        #additional_fields["model_config"] = ConfigDict(**model_config)
 
         # Create the dynamic model using Pydantic's create_model with prefixed name
+        # Use __config__ instead of model_config for better compatibility with Pydantic v2.11.9
         model = create_model(
             prefixed_name,
             __base__=GrafaBaseNode,  # Inherit from BaseNode to include its fields
             __doc__=description,  # Add the description as the model's docstring
+            __config__=ConfigDict(**model_config),  # Pass as config using __config__
             **additional_fields,
         )
 

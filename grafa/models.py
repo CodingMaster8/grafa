@@ -232,13 +232,14 @@ class GrafaBaseNode(BaseModel, ABC):
             Field(description="The type of entity this represents"),
         )
         fields["grafa_original_type_name"] = entity_type
-        fields["model_config"] = ConfigDict(
-            grafa_original_type_name=cls.get_neo4j_label()
-        )
 
         # Create the model with the same name but without metadata fields
+        # Avoid adding model_config as a field to prevent Pydantic v2 conflicts
         template_model = create_model(
-            cls.get_neo4j_label(), __doc__=cls.__doc__, __base__=Entity, **fields
+            cls.get_neo4j_label(), 
+            __doc__=cls.__doc__, 
+            __base__=Entity, 
+            **fields
         )
 
         # Add a method to convert template instance to original class
@@ -986,7 +987,7 @@ class GrafaDocument(GrafaBaseNode):
     async def get_processed_content(self) -> str:
         """Get the processed content of the document.
 
-        This fetches the actual document content from S3 using the stored path.
+        This fetches the actual document content from S3 or local storage using the stored path.
 
         Returns
         -------
@@ -998,14 +999,21 @@ class GrafaDocument(GrafaBaseNode):
         ValueError
             If the processed document path is not set
         RuntimeError
-            If there's an error retrieving the content from S3
+            If there's an error retrieving the content
         """
         if not self.path_processed:
             raise ValueError("Processed document path not available")
 
+        # Local storage support
+        if self.path_processed.startswith("file://"):
+            local_path = Path(self.path_processed.replace("file://", ""))
+            try:
+                return local_path.read_text()
+            except Exception as e:
+                raise RuntimeError(f"Error retrieving document content from local storage: {str(e)}")
+
+        # S3 logic
         try:
-            # Parse the S3 path to get bucket and key
-            # Assume path format is s3://bucket-name/path/to/file.ext
             s3_parts = self.path_processed.replace("s3://", "").split("/", 1)
             bucket = s3_parts[0]
             key = s3_parts[1] if len(s3_parts) > 1 else ""

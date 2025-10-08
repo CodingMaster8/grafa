@@ -1,6 +1,8 @@
 """Client for the Grafa Knowledge System."""
 import asyncio
+import logging
 import os
+import shutil
 from pathlib import Path
 from typing import Literal, Self, Type
 
@@ -35,6 +37,9 @@ from langchain_core.runnables import Runnable
 from langfuse.decorators import observe
 from neo4j import AsyncGraphDatabase
 from pydantic import BaseModel, ConfigDict, Field
+
+# Set up logger
+logger = logging.getLogger(__name__)
 
 # Stage 1. Load and transcription
 # If there are indexes, go to next stages. If not, treat the documents as S3 files only.
@@ -81,6 +86,9 @@ class GrafaConfig(BaseModel):
     )
     s3_bucket: str | None = Field(
         default=None, description="The S3 bucket to use for storing documents"
+    )
+    local_storage_path: str | None = Field(
+            default=None, description="Local directory for storing documents"
     )
     embedding_model: Embeddings = Field(description="The embedding model to use")
     embedding_dimension: int = Field(description="The embedding dimension to use")
@@ -137,8 +145,11 @@ class GrafaConfig(BaseModel):
         __context : Any
             Context passed by Pydantic during initialization
         """
-        self._verify_s3_bucket()
-        await create_bucket(self.s3_bucket)
+        self._verify_storage()
+        if self.s3_bucket:
+            await create_bucket(self.s3_bucket)
+        if self.local_storage_path:
+            Path(self.local_storage_path).mkdir(parents=True, exist_ok=True)          
         await self._connect_to_database()
 
     @classmethod
@@ -165,19 +176,13 @@ class GrafaConfig(BaseModel):
             llm=llm,
         )
 
-    def _verify_s3_bucket(self) -> None:
-        """Verify that the S3 bucket is set.
-
-        Raises
-        ------
-        ValueError
-            If the S3 bucket is not set
-        """
-        if self.s3_bucket is None:
+    def _verify_storage(self) -> None:
+        if not self.s3_bucket and not self.local_storage_path:
             self.s3_bucket = os.getenv("GRAFA_S3_BUCKET")
-            if not self.s3_bucket:
+            self.local_storage_path = os.getenv("GRAFA_LOCAL_STORAGE_PATH")
+            if not self.s3_bucket and not self.local_storage_path:
                 raise ValueError(
-                    "Neither s3_bucket nor GRAFA_S3_BUCKET environment variable were provided"
+                    "Neither s3_bucket, local_storage_path, nor environment variables were provided"
                 )
 
     async def _connect_to_database(self):
@@ -204,6 +209,7 @@ class GrafaConfig(BaseModel):
                 raise RuntimeError("grafa_username is not set")
             if not grafa_password:
                 raise RuntimeError("grafa_password is not set")
+            print("Connecting to Grafa Neo4j URI:", grafa_uri)
             self.neo4j_driver = AsyncGraphDatabase.driver(
                 uri=grafa_uri, auth=(grafa_username, grafa_password)
             )
@@ -304,6 +310,11 @@ class GrafaClient(BaseModel):
     def llm(self) -> Runnable:
         """Access the LLM from the config."""
         return self.grafa_config.llm
+    
+    @property
+    def local_storage_path(self) -> str | None:
+        """Access the local storage path from the config."""
+        return self.grafa_config.local_storage_path
 
     @classmethod
     async def create(cls, **kwargs) -> "GrafaClient":
@@ -506,6 +517,8 @@ class GrafaClient(BaseModel):
         LoadFile
             The uploaded file object with metadata
         """
+        logger.debug(f"Starting upload for document: {document_name}")
+        
         if (document_path is None and document_text is None) or (
             document_path is not None and document_text is not None
         ):
@@ -523,8 +536,34 @@ class GrafaClient(BaseModel):
             source=source,
         )
 
-        await upload_file(file, self.s3_bucket, self.db_name)
-
+        # Handle local storage
+        if self.local_storage_path:
+            local_dir = Path(self.local_storage_path)
+            local_file_path = local_dir / f"{document_name}.txt"
+            if document_text:
+                local_file_path.write_text(document_text)
+            elif document_path:
+                # Copy the file instead of moving it
+                import shutil
+                shutil.copy2(document_path, local_file_path)
+            file.path = str(local_file_path)
+            s3_path = f"file://{local_file_path}"
+            content_hash = str(hash(local_file_path.read_bytes()))
+            
+            # Populate required fields for local storage
+            file._raw_object_key = str(local_file_path)
+            file._s3_bucket = self.local_storage_path  # Use local path as "bucket"
+            file._database_name = self.db_name
+            file._raw_version_id = "local"
+            file._raw_etag = content_hash
+        else:
+            # S3 logic
+            await upload_file(file, self.s3_bucket, self.db_name)
+            # Use S3 ETag as the content hash
+            content_hash = file._raw_etag
+            # Construct S3 URI path
+            s3_path = f"s3://{self.s3_bucket}/{file._raw_object_key}"
+        
         # Determine file extension
         extension = "txt"
         if document_path:
@@ -532,12 +571,6 @@ class GrafaClient(BaseModel):
                 Path(document_path) if isinstance(document_path, str) else document_path
             )
             extension = path_obj.suffix.lstrip(".")
-
-        # Use S3 ETag as the content hash
-        content_hash = file._raw_etag
-
-        # Construct S3 URI path
-        s3_path = f"s3://{self.s3_bucket}/{file._raw_object_key}"
 
         # Check for existing document
         document_results = await GrafaDocument.get_by_name(
@@ -553,7 +586,7 @@ class GrafaClient(BaseModel):
             "source": source,
             "extension": extension,
             "hash_raw": content_hash,
-            "s3_version_raw": file._raw_version_id,
+            "s3_version_raw": getattr(file, "_raw_version_id", None),
             "grafa_database_name": self.db_name,
         }
 
@@ -639,13 +672,25 @@ class GrafaClient(BaseModel):
         if file._grafa_document is None:
             raise ValueError("LoadFile has not been loaded into a GrafaDocument")
 
-        s3_path = f"s3://{self.s3_bucket}/{file._processed_object_key}"
+        if self.local_storage_path:
+            local_file_path = Path(file.path)
+            # Might want to process/transcribe the file here if needed
+            # For now, just update the processed path and hash
+            processed_path = local_file_path  # If you have a processed version, update this
+            processed_hash = str(hash(local_file_path.read_bytes()))
+            document_data = {
+                "path_processed": f"file://{processed_path}",
+                "hash_processed": processed_hash,
+                "s3_version_processed": None,
+            } 
+        else:
+            s3_path = f"s3://{self.s3_bucket}/{file._processed_object_key}"
 
-        document_data = {
-            "path_processed": s3_path,
-            "hash_processed": file._processed_etag,
-            "s3_version_processed": file._processed_version_id,
-        }
+            document_data = {
+                "path_processed": s3_path,
+                "hash_processed": file._processed_etag,
+                "s3_version_processed": file._processed_version_id,
+            }
 
         for key, value in document_data.items():
             if value is not None:
@@ -683,6 +728,8 @@ class GrafaClient(BaseModel):
         list[GrafaChunk]
             The chunks of the document
         """
+        logger.info(f"Starting chunking for document: {grafa_document.name}")
+        
         # Make sure the document has a Neo4j driver
         if not grafa_document._neo4j_driver:
             self.claim_node(grafa_document)
@@ -1381,16 +1428,22 @@ class GrafaClient(BaseModel):
             The final relationships
         """
         # Step 1: Extract entities
+        logger.debug(f"Extracting entities from chunk: {chunk.name}")
         entities = await extract_entities(
             chunk.get_embedding_text(),
             self.get_user_defined_node_type_templates(),
             self.llm,
             self.grafa_database.language,
         )
+        
+        logger.info(f"Extracted {len(entities.entities)} raw entities from chunk {chunk.name}")
+        for i, entity in enumerate(entities.entities):
+            logger.debug(f"  Entity {i+1}: {entity.__class__.__name__} - {getattr(entity, 'name', 'Unnamed')}")
 
         processed_entities = []
         # Step 2: Deduplicate entities
-        for entity in entities.entities:
+        for i, entity in enumerate(entities.entities):
+            logger.debug(f"Processing entity {i+1}/{len(entities.entities)}: {entity.__class__.__name__}")
             entity_node = entity.to_original_class(self)
             similar_entity_results = await self.similarity_search(
                 entity_node.get_embedding_text(),
@@ -1404,6 +1457,8 @@ class GrafaClient(BaseModel):
                 search_mode="allowed",
             )
             similar_entities = [e["node"] for e in similar_entity_results]
+            logger.debug(f"  Found {len(similar_entities)} similar entities for deduplication")
+            
             deduplicated_entity = await deduplicate_entity(
                 entity_node,
                 similar_entities,
@@ -1411,31 +1466,43 @@ class GrafaClient(BaseModel):
                 self.grafa_database.language,
             )
             await deduplicated_entity.save_to_neo4j()
+            
+            # Log the final entity after deduplication
+            entity_name = getattr(deduplicated_entity, 'name', 'Unnamed')
+            logger.info(f"  Final entity: {deduplicated_entity.__class__.__name__} - {entity_name} (UUID: {deduplicated_entity.uuid})")
+            
             if deduplicated_entity.model_config.get("link_to_chunk", False):
                 await chunk.link_node(deduplicated_entity)
             processed_entities.append(deduplicated_entity)
 
         # Step 3: Extract relationships
+        logger.debug(f"Extracting relationships for {len(processed_entities)} entities in chunk {chunk.name}")
         relationships = await extract_relationships(
             chunk.get_embedding_text(),
             processed_entities,
             self.get_user_defined_relationship_types(),
             self.llm,
         )
-        for r in relationships.relationships:
+        
+        logger.info(f"Extracted {len(relationships.relationships) if relationships else 0} relationships from chunk {chunk.name}")
+        for i, r in enumerate(relationships.relationships):
             if r.from_entity_index in range(
                 len(processed_entities)
             ) and r.to_entity_index in range(len(processed_entities)):
                 try:
-                    await processed_entities[r.from_entity_index].create_relationship(
-                        processed_entities[r.to_entity_index], r.type
-                    )
-                except ValueError:
-                    pass
+                    from_entity = processed_entities[r.from_entity_index]
+                    to_entity = processed_entities[r.to_entity_index]
+                    from_name = getattr(from_entity, 'name', 'Unnamed')
+                    to_name = getattr(to_entity, 'name', 'Unnamed')
+                    
+                    await from_entity.create_relationship(to_entity, r.type)
+                    logger.info(f"  Relationship {i+1}: {from_name} --[{r.type}]--> {to_name}")
+                except ValueError as e:
+                    logger.warning(f"  Failed to create relationship {i+1}: {r.type} - {str(e)}")
             else:
-                raise ValueError(
-                    f"Entity at index {r.from_entity_index} or {r.to_entity_index} not found in processed_entities"
-                )
+                error_msg = f"Entity at index {r.from_entity_index} or {r.to_entity_index} not found in processed_entities"
+                logger.error(error_msg)
+                raise ValueError(error_msg)
 
         return processed_entities, relationships
 
@@ -1512,6 +1579,8 @@ class GrafaClient(BaseModel):
         RuntimeError
             If file processing or chunking fails
         """
+        logger.info(f"Starting ingestion of document: {document_name}")
+        
         load_file = await self.upload_file(
             document_name=document_name,
             document_path=document_path,
@@ -1520,7 +1589,11 @@ class GrafaClient(BaseModel):
             author=author,
             source=source,
         )
+        logger.info(f"Successfully uploaded document: {document_name}")
+        
         await self.process_file(load_file)
+        logger.info(f"Successfully processed document: {document_name}")
+        
         document: GrafaDocument = load_file._grafa_document
 
         chunks = await self.chunk_document(
@@ -1529,10 +1602,15 @@ class GrafaClient(BaseModel):
             verbose=chunk_verbose,
             output_language=chunk_output_language,
         )
+        logger.info(f"Document {document_name} chunked into {len(chunks)} chunks")
 
         processed_entities = []
         relationship_outputs = []
-        for chunk in chunks:
+        total_entities = 0
+        total_relationships = 0
+        
+        for i, chunk in enumerate(chunks):
+            logger.info(f"Processing chunk {i+1}/{len(chunks)} for document: {document_name}")
             entities, relationships = await self.process_chunk(
                 chunk,
                 deduplication_similarity_threshold=deduplication_similarity_threshold,
@@ -1542,7 +1620,15 @@ class GrafaClient(BaseModel):
             )
             processed_entities.append(entities)
             relationship_outputs.append(relationships)
+            
+            chunk_entity_count = len(entities)
+            chunk_relationship_count = len(relationships.relationships) if relationships else 0
+            total_entities += chunk_entity_count
+            total_relationships += chunk_relationship_count
+            
+            logger.info(f"Chunk {i+1} processed: {chunk_entity_count} entities, {chunk_relationship_count} relationships")
 
+        logger.info(f"Document {document_name} ingestion completed. Total: {total_entities} entities, {total_relationships} relationships across {len(chunks)} chunks")
         return document, chunks, processed_entities, relationship_outputs
 
     @observe
