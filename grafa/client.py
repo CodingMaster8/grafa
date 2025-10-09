@@ -1401,6 +1401,7 @@ class GrafaClient(BaseModel):
         deduplication_text_threshold: float | None = 0.4,
         deduplication_word_edit_distance: int | None = 5,
         deduplication_query_limit: int = 100,
+        deduplication_mode: Literal["parallel", "sequential"] = "parallel",
     ) -> tuple[list[GrafaBaseNode], RelationshipOutput]:
         """Process a chunk.
 
@@ -1419,6 +1420,8 @@ class GrafaClient(BaseModel):
             The maximum allowed edit distance for name similarity checks, by default 5.
         deduplication_query_limit : int, optional
             The maximum number of entities to query, by default 100.
+        deduplication_mode : Literal["parallel", "sequential"], optional
+            The deduplication mode to use, by default "parallel".
 
         Returns
         -------
@@ -1442,7 +1445,8 @@ class GrafaClient(BaseModel):
 
         processed_entities = []
         # Step 2: Deduplicate entities
-        for i, entity in enumerate(entities.entities):
+        async def deduplicate_single_entity(i: int, entity) -> GrafaBaseNode:
+            """Deduplicate a single entity."""
             logger.debug(f"Processing entity {i+1}/{len(entities.entities)}: {entity.__class__.__name__}")
             entity_node = entity.to_original_class(self)
             similar_entity_results = await self.similarity_search(
@@ -1465,15 +1469,40 @@ class GrafaClient(BaseModel):
                 self.llm,
                 self.grafa_database.language,
             )
-            await deduplicated_entity.save_to_neo4j()
             
             # Log the final entity after deduplication
             entity_name = getattr(deduplicated_entity, 'name', 'Unnamed')
             logger.info(f"  Final entity: {deduplicated_entity.__class__.__name__} - {entity_name} (UUID: {deduplicated_entity.uuid})")
             
-            if deduplicated_entity.model_config.get("link_to_chunk", False):
-                await chunk.link_node(deduplicated_entity)
-            processed_entities.append(deduplicated_entity)
+            return deduplicated_entity
+        
+        if deduplication_mode == "parallel":
+            deduplication_tasks = [
+                deduplicate_single_entity(i, entity)
+                for i, entity in enumerate(entities.entities)
+            ]
+
+            # Execute deduplication tasks concurrently
+            processed_entities = await asyncio.gather(*deduplication_tasks)
+
+            for deduplicated_entity in processed_entities:
+                await deduplicated_entity.save_to_neo4j()
+                if deduplicated_entity.model_config.get("link_to_chunk", False):
+                    await chunk.link_node(deduplicated_entity)
+       
+        else:  # sequential
+            for i, entity in enumerate(entities.entities):
+                deduplicated_entity = await deduplicate_single_entity(i, entity)
+                
+                await deduplicated_entity.save_to_neo4j()
+
+                # Log the final entity after deduplication
+                entity_name = getattr(deduplicated_entity, 'name', 'Unnamed')
+                logger.info(f"  Final entity: {deduplicated_entity.__class__.__name__} - {entity_name} (UUID: {deduplicated_entity.uuid})")
+                
+                if deduplicated_entity.model_config.get("link_to_chunk", False):
+                    await chunk.link_node(deduplicated_entity)
+                processed_entities.append(deduplicated_entity)
 
         # Step 3: Extract relationships
         logger.debug(f"Extracting relationships for {len(processed_entities)} entities in chunk {chunk.name}")
@@ -1522,6 +1551,7 @@ class GrafaClient(BaseModel):
         deduplication_text_threshold: float | None = 0.4,
         deduplication_word_edit_distance: int | None = 5,
         deduplication_query_limit: int = 100,
+        deduplication_mode: Literal["parallel", "sequential"] = "parallel",
     ) -> tuple[
         GrafaDocument,
         list[GrafaChunk],
@@ -1563,6 +1593,8 @@ class GrafaClient(BaseModel):
             Maximum edit distance for name matching in deduplication, by default 5
         deduplication_query_limit : int, optional
             Maximum number of similar entities to query for deduplication, by default 100
+        deduplication_mode : Literal["parallel", "sequential"], optional
+            Whether to deduplicate entities in parallel or sequentially, by default "parallel"
 
         Returns
         -------
@@ -1617,6 +1649,7 @@ class GrafaClient(BaseModel):
                 deduplication_text_threshold=deduplication_text_threshold,
                 deduplication_word_edit_distance=deduplication_word_edit_distance,
                 deduplication_query_limit=deduplication_query_limit,
+                deduplication_mode=deduplication_mode,
             )
             processed_entities.append(entities)
             relationship_outputs.append(relationships)
