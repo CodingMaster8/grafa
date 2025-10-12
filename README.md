@@ -9,6 +9,7 @@
 [![PyPI version](https://badge.fury.io/py/grafa.svg)](https://badge.fury.io/py/grafa)
 
 ---
+![Logo Grafa](images/grafa_logo.png)
 
 **Documentation**: <a href="https://pablo.vargas.github.io/grafa/" target="_blank">https://codingmaster8.github.io/grafa/</a>
 
