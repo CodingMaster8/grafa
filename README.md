@@ -27,6 +27,8 @@ Grafa is a comprehensive Python library for building, managing, and querying kno
 - **Knowledge Graph Construction**: Build structured knowledge graphs in Neo4j
 - **Smart Search**: Perform semantic, text-based, and hybrid searches across your knowledge base
 - **Deduplication**: Automatically merge similar entities to maintain graph quality
+  
+![Example KG made with Grafa](images/example_kg.png)
 
 ## Key Features
 
