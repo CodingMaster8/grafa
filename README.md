@@ -418,4 +418,4 @@ It'll automatically watch for changes in your code.
 
 ## License
 
-This project is licensed under the terms of the Not open source.
+This project is licensed under the terms of MIT License.
