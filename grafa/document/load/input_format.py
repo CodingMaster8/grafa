@@ -4,6 +4,7 @@ import os
 import tempfile
 from functools import wraps
 from typing import Callable, Dict
+import json
 
 import fsspec
 import markdown
@@ -100,3 +101,15 @@ async def process_image_file(file_path: str) -> str:
     with fsspec.open(file_path, "rb") as f:
         image = Image.open(io.BytesIO(await f.read()))
     return await get_transcription(image)
+
+
+@file_processor("json")
+async def process_json(file_path: str) -> str:
+    """Process a JSON file."""
+    with fsspec.open(file_path, "r") as f:
+        json_content = f.read()
+        if isinstance(json_content, bytes):
+            json_content = json_content.decode("utf-8")
+    # Pretty-print JSON content
+    parsed_json = json.loads(json_content)
+    return json.dumps(parsed_json, indent=2, ensure_ascii=False)

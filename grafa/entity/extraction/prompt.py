@@ -38,6 +38,7 @@ Your task is to recognize all the unique entities in a provided text excerpt.
     - Extract entities even when mentioned in hypothetical contexts.
     - Do not extract entities that are explicitly negated (e.g., "not affiliated with Amazon")
     - For entities in quotations or reported speech, extract them normally but don't include speculative attributes
+    14. If an entitiy's property is not explicitly mentioned in the excerpt, add empty value for that property in the output.
 </guidelines>
 
 Both the excerpt and information about the origin document are provided below:

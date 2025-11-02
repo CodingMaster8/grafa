@@ -1447,7 +1447,6 @@ class GrafaClient(BaseModel):
         # Step 2: Deduplicate entities
         async def deduplicate_single_entity(i: int, entity) -> GrafaBaseNode:
             """Deduplicate a single entity."""
-            logger.debug(f"Processing entity {i+1}/{len(entities.entities)}: {entity.__class__.__name__}")
             entity_node = entity.to_original_class(self)
             similar_entity_results = await self.similarity_search(
                 entity_node.get_embedding_text(),
@@ -1461,7 +1460,7 @@ class GrafaClient(BaseModel):
                 search_mode="allowed",
             )
             similar_entities = [e["node"] for e in similar_entity_results]
-            logger.debug(f"  Found {len(similar_entities)} similar entities for deduplication")
+            logger.debug(f"  Found {len(similar_entities)} similar entities for deduplication of entity {i+1}: {entity_node.__class__.__name__} - {getattr(entity_node, 'name', 'Unnamed')}")
             
             deduplicated_entity = await deduplicate_entity(
                 entity_node,
