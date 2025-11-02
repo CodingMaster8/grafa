@@ -9,12 +9,37 @@ authors = [
 ]
 description = "Knowledge Graph Generation Library"
 readme = "README.md"
-classifiers = [
-    "Programming Language :: Python :: 3 :: Only",
-]
-requires-python = ">=3.11"
 
-dynamic = ["version", "dependencies", "license", "optional-dependencies"]
+keywords = [
+    "knowledge-graph",
+    "neo4j",
+    "graph-database",
+    "nlp",
+    "rag",
+    "graph-rag",
+    "langchain",
+    "embeddings",
+    "entity-extraction"
+]
+
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",  
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Database",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+requires-python = ">=3.11"
+license = {text = "MIT"}
+
+dynamic = ["version", "dependencies", "optional-dependencies"]
 
 [tool.hatch]
 
@@ -65,9 +90,30 @@ lint-check = [
 docs-serve = "mkdocs serve"
 docs-build = "mkdocs build"
 
+[tool.hatch.build.targets.wheel]
+packages = ["grafa"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/grafa",
+    "/tests",
+    "/README.md",
+    "/LICENSE",
+    "/requirements.txt",
+]
+exclude = [
+    "/.github",
+    "/.vscode",
+    "/docs",
+    "*.pyc",
+    "__pycache__",
+]
+
 [project.urls]
 Documentation = "https://codingmaster8.github.io/grafa/"
 Source = "https://github.com/codingmaster8/grafa"
+Issues = "https://github.com/codingmaster8/grafa/issues"
+Changelog = "https://github.com/codingmaster8/grafa/releases"
 
 [tool.setuptools.package-data]
 "grafa" = ["py.typed"]
@@ -129,7 +175,7 @@ line-length = 88
 indent-width = 4
 
 # Assume Python 3.8
-target-version = "py38"
+target-version = "py311"
 
 [tool.ruff.lint]
 # Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`)  codes by default.
