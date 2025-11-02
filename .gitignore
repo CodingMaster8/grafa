@@ -109,3 +109,6 @@ ENV/
 
 #testing docs
 /testing_docs
+
+# Cruft
+.cruft.json
