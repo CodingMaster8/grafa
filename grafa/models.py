@@ -952,7 +952,7 @@ class GrafaBaseNode(BaseModel, ABC):
 @register_node_type
 class GrafaDocument(GrafaBaseNode):
     """
-    Node the represents a file, a collection of chunks.
+    Node that represents a file, a collection of chunks.
 
     It has versioning to support multiple versions of the same document.
     A document does not contain its content itself, but is rather joined to a collection of chunks.
